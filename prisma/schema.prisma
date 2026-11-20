@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  MERCHANT
+  ADMIN
+}
+
+enum FoodCategory {
+  BOULANGERIE          // Pain, viennoiseries, pâtisseries
+  PLATS_CUISINES       // Plats préparés, traiteur, fast-food
+  FRUITS_ET_LEGUMES    // Produits frais du marché / primeur
+  PRODUITS_LAITIERS    // Yaourts, lait, fromage, beurre
+  VIANDES_ET_POISSONS  // Boucherie, charcuterie, poissonnerie
+  EPICERIE_SECHE       // Riz, pâtes, biscuits, céréales
+  CONSERVES            // Boîtes de conserve, bocaux
+  BOISSONS             // Jus, sodas, eau, produits laitiers liquides
+  PANIER_SURPRISE      // Lot d'invendus variés
+  AUTRES
+}
+
+enum OfferStatus {
+  ACTIVE
+  RESERVED
+  COMPLETED
+  EXPIRED
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReportReason {
+  EXPIRED_PRODUCT      // Produit déjà périmé / impropre à la consommation
+  FAKE_IMAGE           // Photo non réelle / prise sur internet
+  SCAM_OR_NO_SHOW      // Arnaque ou vendeur absent
+  INAPPROPRIATE        // Contenu ou commentaire offensant
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id              String         @id @default(uuid())
+  email           String?        @unique
+  phone           String         @unique
+  passwordHash    String
+  fullName        String
+  role            Role           @default(USER)
+  isSuspended     Boolean        @default(false)
+
+  merchant        Merchant?
+  offers          Offer[]        @relation("CreatedOffers")
+  reservations    Reservation[]
+  reviews         Review[]
+  reviewReplies   ReviewReply[]
+  reviewVotes     ReviewVote[]
+  refreshTokens   RefreshToken[]
+
+  reportsCreated  Report[]       @relation("Reporter")
+  reportsReceived Report[]       @relation("ReportedUser")
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Merchant {
+  id            String   @id @default(uuid())
+  ownerId       String   @unique
+  owner         User     @relation(fields: [ownerId], references: [id])
+  businessName  String
+  description   String?
+  address       String
+  quartier      String?
+  latitude      Float
+  longitude     Float
+  isVerified    Boolean  @default(false)
+
+  averageRating Float    @default(0)
+  reviewCount   Int      @default(0)
+
+  offers        Offer[]
+  reviews       Review[] @relation("MerchantReviews")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Offer {
+  id                String        @id @default(uuid())
+  creatorId         String
+  creator           User          @relation("CreatedOffers", fields: [creatorId], references: [id])
+  merchantId        String?
+  merchant          Merchant?     @relation(fields: [merchantId], references: [id])
+
+  title             String
+  description       String?
+  category          FoodCategory
+  images            OfferImage[]  // Au moins 1 photo validée côté DTO NestJS
+
+  originalPrice     Int?          // Uniquement pour les marchands (% de solde)
+  price             Int           // 0 si gratuit / don
+  quantityAvailable Int           @default(1)
+
+  address           String
+  quartier          String?
+  latitude          Float
+  longitude         Float
+
+  expirationDate    DateTime      // DLC
+  pickupDeadline    DateTime      // Date et heure limite de récupération
+  status            OfferStatus   @default(ACTIVE)
+
+  reservations      Reservation[]
+  reviews           Review[]      @relation("OfferReviews")
+  reports           Report[]      @relation("ReportedOffer")
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([category])
+  @@index([expirationDate])
+  @@index([latitude, longitude])
+}
+
+model OfferImage {
+  id        String   @id @default(uuid())
+  offerId   String
+  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  url       String
+  isMain    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Reservation {
+  id               String            @id @default(uuid())
+  buyerId          String
+  buyer            User              @relation(fields: [buyerId], references: [id])
+  offerId          String
+  offer            Offer             @relation(fields: [offerId], references: [id])
+
+  quantity         Int               @default(1)
+  buyerConfirmed   Boolean           @default(false)
+  creatorConfirmed Boolean           @default(false)
+
+  status           ReservationStatus @default(PENDING)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model Review {
+  id          String       @id @default(uuid())
+  authorId    String
+  author      User         @relation(fields: [authorId], references: [id])
+
+  offerId     String?
+  offer       Offer?       @relation("OfferReviews", fields: [offerId], references: [id])
+  merchantId  String?
+  merchant    Merchant?    @relation("MerchantReviews", fields: [merchantId], references: [id])
+
+  rating      Int
+  comment     String?
+
+  reply       ReviewReply?
+  votes       ReviewVote[]
+  reports     Report[]     @relation("ReportedReview")
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model ReviewReply {
+  id        String   @id @default(uuid())
+  reviewId  String   @unique
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model ReviewVote {
+  id        String   @id @default(uuid())
+  reviewId  String
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  isHelpful Boolean
+
+  @@unique([reviewId, userId])
+}
+
+model Report {
+  id             String       @id @default(uuid())
+  reporterId     String
+  reporter       User         @relation("Reporter", fields: [reporterId], references: [id])
+
+  // Cible du signalement (une seule des trois est remplie selon le cas)
+  offerId        String?
+  offer          Offer?       @relation("ReportedOffer", fields: [offerId], references: [id], onDelete: Cascade)
+  reviewId       String?
+  review         Review?      @relation("ReportedReview", fields: [reviewId], references: [id], onDelete: Cascade)
+  reportedUserId String?
+  reportedUser   User?        @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
+
+  reason         ReportReason
+  details        String?
+  status         ReportStatus @default(PENDING)
+  adminNote      String?
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
