@@ -280,4 +280,9 @@ model Report {
 
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  // Un rapporteur ne peut signaler qu'une fois la même cible.
+  @@unique([reporterId, offerId])
+  @@unique([reporterId, reviewId])
+  @@unique([reporterId, reportedUserId])
 }
