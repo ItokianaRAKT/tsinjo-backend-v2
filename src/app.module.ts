@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { MerchantsModule } from './merchants/merchants.module.js';
 import { OffersModule } from './offers/offers.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { ReservationsModule } from './reservations/reservations.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -31,6 +32,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     UsersModule,
     MerchantsModule,
     OffersModule,
+    ReservationsModule,
     UploadsModule,
   ],
   controllers: [AppController],

@@ -41,7 +41,7 @@ export class OffersSyncService {
     });
   }
 
-  private async penalizeBuyer(
+  async penalizeBuyer(
     tx: Prisma.TransactionClient,
     buyer: { id: string; phone: string; consecutiveCancellations: number; suspensionCount: number },
     now: Date,
@@ -49,12 +49,12 @@ export class OffersSyncService {
     const nextCount = buyer.consecutiveCancellations + 1;
     const data: Prisma.UserUpdateInput = { consecutiveCancellations: nextCount };
     if (nextCount >= 3) {
-      if (buyer.suspensionCount === 0) {
+      const nextSuspensions = buyer.suspensionCount + 1;
+      data.suspensionCount = nextSuspensions;
+      if (nextSuspensions === 1) {
         data.suspendedUntil = new Date(now.getTime() + SUSPENSION_DAYS[0] * DAY_MS);
-        data.suspensionCount = 1;
-      } else if (buyer.suspensionCount === 1) {
+      } else if (nextSuspensions === 2) {
         data.suspendedUntil = new Date(now.getTime() + SUSPENSION_DAYS[1] * DAY_MS);
-        data.suspensionCount = 2;
       } else {
         data.isPermanentlyBanned = true;
         const availableAfter = new Date(now.getTime() + PHONE_QUARANTINE_DAYS * DAY_MS);
@@ -63,6 +63,10 @@ export class OffersSyncService {
           create: { phone: buyer.phone, reason: 'PERMANENT_BAN', availableAfter },
           update: { reason: 'PERMANENT_BAN', availableAfter },
         });
+        await tx.offer.updateMany({
+          where: { creatorId: buyer.id, status: OfferStatus.ACTIVE },
+          data: { status: OfferStatus.SUSPENDED },
+        });
       }
       // Reset après sanction : permet l'échelle 7j -> 14j -> ban définitif
       data.consecutiveCancellations = 0;
@@ -70,20 +74,29 @@ export class OffersSyncService {
     await tx.user.update({ where: { id: buyer.id }, data });
   }
 
-  private async restockOffer(
+  async restockOffer(
     tx: Prisma.TransactionClient,
     reservation: {
       quantity: number;
-      offer: { id: string; status: OfferStatus; quantityAvailable: number; pickupDeadline: Date };
+      offer: {
+        id: string;
+        status: OfferStatus;
+        quantityAvailable: number;
+        pickupDeadline: Date;
+        expirationDate: Date;
+      };
     },
     now: Date,
   ): Promise<void> {
     const offer = reservation.offer;
-    const reactivate = offer.status === OfferStatus.SOLD_OUT && offer.pickupDeadline > now;
+    const reactivate =
+      offer.status === OfferStatus.SOLD_OUT &&
+      offer.pickupDeadline > now &&
+      offer.expirationDate > now;
     await tx.offer.update({
       where: { id: offer.id },
       data: {
-        quantityAvailable: offer.quantityAvailable + reservation.quantity,
+        quantityAvailable: { increment: reservation.quantity },
         ...(reactivate ? { status: OfferStatus.ACTIVE } : {}),
       },
     });

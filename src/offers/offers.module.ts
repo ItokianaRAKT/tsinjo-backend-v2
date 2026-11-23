@@ -6,5 +6,6 @@ import { OffersSyncService } from './offers-sync.service.js';
 @Module({
   controllers: [OffersController],
   providers: [OffersService, OffersSyncService],
+  exports: [OffersSyncService],
 })
 export class OffersModule {}

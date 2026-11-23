@@ -31,6 +31,7 @@ const makeStaleReservation = (overrides: Record<string, unknown> = {}) => ({
     status: OfferStatus.SOLD_OUT,
     quantityAvailable: 0,
     pickupDeadline: future(24),
+    expirationDate: future(48),
   },
   ...overrides,
 });
@@ -61,7 +62,7 @@ describe('OffersSyncService (lazy, no cron)', () => {
     // Quantité réinjectée + retour en ACTIVE (SOLD_OUT et pickupDeadline future)
     expect(prisma.offer.update).toHaveBeenCalledWith({
       where: { id: 'offer-1' },
-      data: { quantityAvailable: 2, status: OfferStatus.ACTIVE },
+      data: { quantityAvailable: { increment: 2 }, status: OfferStatus.ACTIVE },
     });
     expect(prisma.offer.updateMany).toHaveBeenCalledWith({
       where: expect.objectContaining({ status: { in: [OfferStatus.ACTIVE, OfferStatus.SOLD_OUT] } }),
