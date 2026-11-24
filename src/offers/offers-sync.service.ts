@@ -24,10 +24,15 @@ export class OffersSyncService {
         include: { offer: true, buyer: true },
       });
       for (const reservation of staleReservations) {
-        await tx.reservation.update({
-          where: { id: reservation.id },
+        // Transition conditionnelle : deux synchro concurrentes ne peuvent pas
+        // pénaliser/injecter deux fois la même réservation.
+        const flagged = await tx.reservation.updateMany({
+          where: { id: reservation.id, status: ReservationStatus.PENDING },
           data: { status: ReservationStatus.NO_SHOW },
         });
+        if (flagged.count !== 1) {
+          continue;
+        }
         await this.penalizeBuyer(tx, reservation.buyer, now);
         await this.restockOffer(tx, reservation, now);
       }

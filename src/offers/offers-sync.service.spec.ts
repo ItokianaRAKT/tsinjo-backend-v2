@@ -7,7 +7,7 @@ const future = (hours: number): Date => new Date(Date.now() + hours * 3_600_000)
 
 const prismaMock = () => ({
   $transaction: vi.fn(),
-  reservation: { findMany: vi.fn(), update: vi.fn() },
+  reservation: { findMany: vi.fn(), updateMany: vi.fn() },
   offer: { update: vi.fn(), updateMany: vi.fn() },
   user: { update: vi.fn() },
   phoneCooldown: { upsert: vi.fn() },
@@ -48,11 +48,12 @@ describe('OffersSyncService (lazy, no cron)', () => {
 
   it('flags a PENDING reservation older than 1h as NO_SHOW, restocks and increments the buyer counter', async () => {
     prisma.reservation.findMany.mockResolvedValue([makeStaleReservation()]);
+    prisma.reservation.updateMany.mockResolvedValue({ count: 1 });
 
     await sync.syncCatalogState();
 
-    expect(prisma.reservation.update).toHaveBeenCalledWith({
-      where: { id: 'reservation-1' },
+    expect(prisma.reservation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'reservation-1', status: ReservationStatus.PENDING },
       data: { status: ReservationStatus.NO_SHOW },
     });
     expect(prisma.user.update).toHaveBeenCalledWith({
@@ -82,7 +83,17 @@ describe('OffersSyncService (lazy, no cron)', () => {
         }),
       }),
     );
-    expect(prisma.reservation.update).not.toHaveBeenCalled();
+    expect(prisma.reservation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('skips penalty and restock when a concurrent sync already flagged the reservation', async () => {
+    prisma.reservation.findMany.mockResolvedValue([makeStaleReservation()]);
+    prisma.reservation.updateMany.mockResolvedValue({ count: 0 });
+
+    await sync.syncCatalogState();
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.offer.update).not.toHaveBeenCalled();
   });
 
   it('suspends the buyer 7 days when consecutiveCancellations reach 3', async () => {
@@ -96,6 +107,7 @@ describe('OffersSyncService (lazy, no cron)', () => {
         },
       }),
     ]);
+    prisma.reservation.updateMany.mockResolvedValue({ count: 1 });
 
     await sync.syncCatalogState();
 
