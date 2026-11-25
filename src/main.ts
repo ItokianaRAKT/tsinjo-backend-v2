@@ -12,7 +12,16 @@ async function bootstrap() {
   });
 
   app.use(helmet());
-  app.enableCors();
+  // CORS : liste blanche via CORS_ORIGIN (séparée par des virgules). Sans valeur,
+  // aucune origine tierce n'est acceptée en production (reflet libre en dev).
+  const corsOrigins = (process.env.CORS_ORIGIN ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({
+    origin: corsOrigins.length > 0 ? corsOrigins : process.env.NODE_ENV !== 'production',
+    credentials: true,
+  });
   // Fichiers statiques hors global prefix : /uploads/offers/<uuid>.jpg
   app.useStaticAssets(OFFERS_UPLOAD_DIR, { prefix: OFFERS_URL_PREFIX });
   app.setGlobalPrefix('api/v1');
