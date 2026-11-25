@@ -17,6 +17,7 @@ import {
   IsString,
   IsUUID,
   Length,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -190,4 +191,19 @@ export class ListOffersDto {
   @IsOptional()
   @IsIn(['default', 'distance', 'dlc'])
   sortBy?: 'default' | 'distance' | 'dlc';
+
+  @ApiPropertyOptional({ example: 1, default: 1, description: 'Page (1-indexée)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ example: 20, default: 20, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

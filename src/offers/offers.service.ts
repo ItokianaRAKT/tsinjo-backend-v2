@@ -24,6 +24,13 @@ const OFFER_INCLUDE = {
 
 type OfferWithRelations = Prisma.OfferGetPayload<{ include: typeof OFFER_INCLUDE }>;
 
+const visibleCreator = (now: Date): Prisma.UserWhereInput => ({
+  isPermanentlyBanned: false,
+  isManuallyBlocked: false,
+  deletedAt: null,
+  OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: now } }],
+});
+
 @Injectable()
 export class OffersService {
   constructor(
@@ -111,12 +118,7 @@ export class OffersService {
       quantityAvailable: { gt: 0 },
       pickupDeadline: { gt: now },
       expirationDate: { gt: now },
-      creator: {
-        isPermanentlyBanned: false,
-        isManuallyBlocked: false,
-        deletedAt: null,
-        OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: now } }],
-      },
+      creator: visibleCreator(now),
       ...(dto.category ? { category: dto.category } : {}),
       ...(dto.quartier ? { quartier: { equals: dto.quartier, mode: 'insensitive' } } : {}),
       ...(dto.merchantId ? { merchantId: dto.merchantId } : {}),
@@ -151,14 +153,23 @@ export class OffersService {
       );
     }
 
-    return sortOffers(enriched, dto.sortBy ?? 'default', dto.lat, dto.lng, now);
+    const page = dto.page ?? 1;
+    const limit = dto.limit ?? 20;
+    // shortcut: pagination après tri/filtre en mémoire (maxDistanceKm), passer en SQL si le catalogue grossit
+    return sortOffers(enriched, dto.sortBy ?? 'default', dto.lat, dto.lng, now).slice(
+      (page - 1) * limit,
+      page * limit,
+    );
   }
 
   async findOne(id: string): Promise<
     OfferWithRelations & { discountPercentage: number | null }
   > {
     await this.sync.syncCatalogState();
-    const offer = await this.prisma.offer.findUnique({ where: { id }, include: OFFER_INCLUDE });
+    const offer = await this.prisma.offer.findFirst({
+      where: { id, creator: visibleCreator(new Date()) },
+      include: OFFER_INCLUDE,
+    });
     if (!offer) {
       throw new NotFoundException('Offer not found');
     }
