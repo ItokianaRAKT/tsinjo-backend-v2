@@ -19,7 +19,15 @@ import { discountPercentage, haversineKm, sortOffers } from './offers.utils.js';
 const OFFER_INCLUDE = {
   images: true,
   creator: { select: { id: true, fullName: true, creatorCancellationCount: true } },
-  merchant: { select: { id: true, businessName: true } },
+  merchant: {
+    select: {
+      id: true,
+      businessName: true,
+      averageRating: true,
+      reviewCount: true,
+      isVerified: true,
+    },
+  },
 } satisfies Prisma.OfferInclude;
 
 type OfferWithRelations = Prisma.OfferGetPayload<{ include: typeof OFFER_INCLUDE }>;
